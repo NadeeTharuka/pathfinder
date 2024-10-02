@@ -1,42 +1,66 @@
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
-import 'package:camera/camera.dart';
-import 'package:flutter_sound/flutter_sound.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 
-class RoamModeScreen extends StatefulWidget {
-  const RoamModeScreen({super.key});
+class RoamScreen extends StatefulWidget {
+  const RoamScreen({super.key});
 
   @override
-  _RoamModeScreenState createState() => _RoamModeScreenState();
+  _RoamScreenState createState() => _RoamScreenState();
 }
 
-class _RoamModeScreenState extends State<RoamModeScreen> {
-  // ... (camera, audio, speech recognition initialization)
+class _RoamScreenState extends State<RoamScreen> {
+  late AudioPlayer _controller;
+  bool _isSpeakerOn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AudioPlayer();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _toggleAudioOutput() {
+    setState(() {
+      _isSpeakerOn = !_isSpeakerOn;
+      if (_isSpeakerOn) {
+        _controller.setAudioContext(AudioContext(
+          android: const AudioContextAndroid(
+            isSpeakerphoneOn: true,
+          ),
+        ));
+      } else {
+        _controller.setAudioContext(AudioContext(
+          android: const AudioContextAndroid(
+            isSpeakerphoneOn: false,
+          ),
+        ));
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
-        children: [
-          // Camera preview
-          Expanded(
-            child: CameraPreview(_controller),
-          ),
-          // Audio output controls
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              IconButton(
-                onPressed: _toggleAudioOutput,
-                icon: const Icon(Icons.headset),
-              ),
-              IconButton(
-                onPressed: _toggleAudioOutput,
-                icon: const Icon(Icons.speaker),
-              ),
-            ],
-          ),
-        ],
+      appBar: AppBar(
+        title: const Text('Roam Mode'),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              onPressed: _toggleAudioOutput,
+              child: Text(
+                  _isSpeakerOn ? 'Switch to Earpiece' : 'Switch to Speaker'),
+            ),
+            // Add other UI components here
+          ],
+        ),
       ),
     );
   }

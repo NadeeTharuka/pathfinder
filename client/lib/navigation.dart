@@ -1,17 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_mapbox_navigation/flutter_mapbox_navigation.dart';
 
-class NavigationScreen extends StatefulWidget {
-  const NavigationScreen({super.key});
-
-  @override
-  State<NavigationScreen> createState() => _NavigationScreenState();
+void main() {
+  runApp(const MyApp());
 }
 
-class _NavigationScreenState extends State<NavigationScreen> {
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Flutter Demo',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+      ),
+      home: const MapView(),
+    );
+  }
+}
+
+class MapView extends StatefulWidget {
+  const MapView({super.key});
+
+  @override
+  State<MapView> createState() => _MapViewState();
+}
+
+class _MapViewState extends State<MapView> {
   MapBoxNavigationViewController? _controller;
   String? _instruction;
-  final bool _isMultipleStop = false; // Change to true for multiple stops
+  final bool _isMultipleStop = false;
   double? _distanceRemaining, _durationRemaining;
   bool _routeBuilt = false;
   bool _isNavigating = false;
@@ -21,11 +41,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
   Future<void> initialize() async {
     if (!mounted) return;
     _navigationOption = MapBoxNavigation.instance.getDefaultOptions();
-    // Set your desired initial latitude and longitude
     _navigationOption.initialLatitude = 8.6538461;
     _navigationOption.initialLongitude = 81.2083256;
-    _navigationOption.mode =
-        MapBoxNavigationMode.driving; // Change mode if needed
+    _navigationOption.mode = MapBoxNavigationMode.driving;
     MapBoxNavigation.instance.registerRouteEventListener(_onRouteEvent);
   }
 
@@ -44,12 +62,10 @@ class _NavigationScreenState extends State<NavigationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Navigation'),
-      ),
       body: Column(
         children: [
-          Expanded(
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 1,
             child: Container(
               color: Colors.grey[100],
               child: MapBoxNavigationView(
@@ -62,42 +78,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
               ),
             ),
           ),
-          // Add any additional navigation controls here (optional)
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              children: [
-                // Button to start navigation (if needed)
-                ElevatedButton(
-                  onPressed: () =>
-                      _startNavigation(), // Implement navigation logic
-                  child: const Text('Start Navigation'),
-                ),
-                const Spacer(),
-                // Additional controls like zoom or map type (optional)
-              ],
-            ),
-          ),
         ],
       ),
     );
-  }
-
-  Future<void> _startNavigation() async {
-    // Implement your navigation logic here
-    // For example, define your waypoints for multiple stops
-    if (_isMultipleStop) {
-      // ... Add your waypoints logic here ...
-    } else {
-      // Single stop navigation (replace with your destination)
-      final destination = WayPoint(
-        name: 'Your Destination Name',
-        latitude: 37.7749, // Replace with your destination latitude
-        longitude: -122.4194, // Replace with your destination longitude
-      );
-      await _controller?.buildRoute(wayPoints: [destination]);
-      await _controller?.startNavigation();
-    }
   }
 
   Future<void> _onRouteEvent(e) async {
@@ -127,7 +110,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
         if (!_isMultipleStop) {
           await Future.delayed(const Duration(seconds: 3));
           await _controller?.finishNavigation();
-        }
+        } else {}
         break;
       case MapBoxEvent.navigation_finished:
       case MapBoxEvent.navigation_cancelled:

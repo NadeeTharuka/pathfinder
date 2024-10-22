@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 class BottomNavBar extends StatelessWidget {
@@ -23,24 +24,27 @@ class BottomNavBar extends StatelessWidget {
         children: [
           IconButton(
             onPressed: () => Navigator.pushNamed(context, '/home'),
-            icon: const Icon(Icons.home),
+            icon: const Icon(CupertinoIcons.home),
             color: Colors.blue,
           ),
-          const Spacer(),
+          IconButton(
+            onPressed: () => Navigator.pushNamed(context, '/roam_mode'),
+            icon: const Icon(CupertinoIcons.command),
+            color: Colors.blue,
+          ),
           IconButton(
             onPressed: () => Navigator.pushNamed(context, '/navigation_mode'),
-            icon: const ImageIcon(
-                AssetImage('lib/assets/images/navigation_icon.png')),
+            icon: const Icon(CupertinoIcons.compass),
+            color: Colors.blue,
           ),
-          const Spacer(),
           IconButton(
             onPressed: () => Navigator.pushNamed(context, '/settings'),
-            icon: const Icon(Icons.settings),
+            icon: const Icon(CupertinoIcons.settings),
             color: Colors.blue,
           ),
           IconButton(
             onPressed: () => Navigator.pushNamed(context, '/profile'),
-            icon: const Icon(Icons.person),
+            icon: const Icon(CupertinoIcons.person),
             color: Colors.blue,
           ),
         ],

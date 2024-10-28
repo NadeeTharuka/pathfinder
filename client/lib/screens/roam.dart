@@ -1,12 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
-import 'package:web_socket_channel/io.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 
 class RoamModeScreen extends StatefulWidget {
   const RoamModeScreen({super.key});
@@ -17,18 +18,21 @@ class RoamModeScreen extends StatefulWidget {
 
 class _RoamModeScreenState extends State<RoamModeScreen> {
   CameraController? _controller;
-  late WebSocketChannel _channel;
-  bool _isStreaming = false;
   final SpeechToText _speechToText = SpeechToText();
+  final FlutterTts _flutterTts = FlutterTts();
   bool _isListening = false;
   Timer? _listeningTimer;
+  Timer? _responseTimer;
+  Timer? _restartListeningTimer;
+  List<dynamic>? _recognitions;
+  bool _waitingForResponse = false;
 
   @override
   void initState() {
     super.initState();
     _initializeCamera();
-    _connectWebSocket();
     _initSpeech();
+    _initTts();
   }
 
   Future<void> _initializeCamera() async {
@@ -42,18 +46,21 @@ class _RoamModeScreenState extends State<RoamModeScreen> {
 
     await _controller!.initialize();
     setState(() {});
-  }
 
-  void _connectWebSocket() {
-    _channel = IOWebSocketChannel.connect('ws://your_server_url');
-    _channel.stream.listen((message) {
-      // Handle server responses here
-    });
+    // Start capturing and sending images
+    _captureAndSendImage();
   }
 
   Future<void> _initSpeech() async {
     await _speechToText.initialize();
     _startListening(); // Start listening automatically
+  }
+
+  void _initTts() {
+    _flutterTts.setCompletionHandler(() {
+      // Capture and send the next image after TTS finishes speaking
+      _captureAndSendImage();
+    });
   }
 
   void _startListening() async {
@@ -72,48 +79,84 @@ class _RoamModeScreenState extends State<RoamModeScreen> {
       setState(() {
         _isListening = false;
       });
-      // Restart listening after a short delay
-      _listeningTimer = Timer(const Duration(seconds: 5), _startListening);
     }
   }
 
-  void _onSpeechResult(SpeechRecognitionResult result) {
+  void _onSpeechResult(SpeechRecognitionResult result) async {
     final recognizedWords = result.recognizedWords.toLowerCase();
     print('Recognized words: $recognizedWords');
     if (recognizedWords.contains('go back')) {
       Navigator.pop(context);
+    } else if (recognizedWords.contains('home')) {
+      Navigator.pushNamed(context, '/');
     } else if (recognizedWords.contains('navigation')) {
       Navigator.pushNamed(context, '/navigation_mode');
     }
+
+    // Stop listening and wait for 2 seconds before restarting
+    _stopListening();
+    await Future.delayed(const Duration(seconds: 2));
+    _startListening();
   }
 
-  Future<void> _startStreaming() async {
-    if (!_isStreaming) {
-      await _controller!.startImageStream((CameraImage image) async {
-        // Convert image data to a format suitable for sending over WebSocket
-        final bytes = image.planes.fold<Uint8List>(
-          Uint8List(0),
-          (Uint8List previousValue, Plane plane) =>
-              Uint8List.fromList(previousValue + plane.bytes),
-        );
+  Future<void> _captureAndSendImage() async {
+    if (_controller == null || !_controller!.value.isInitialized) {
+      print("Camera is not initialized");
+      return;
+    }
 
-        // Send image data to the server
-        _channel.sink.add(bytes);
-      });
+    try {
+      final image = await _controller!.takePicture();
+      final bytes = await image.readAsBytes();
 
-      setState(() {
-        _isStreaming = true;
-      });
+      // Send bytes to server
+      await _sendImageToServer(bytes);
+    } catch (e) {
+      print("Error capturing image: $e");
     }
   }
 
-  Future<void> _stopStreaming() async {
-    if (_isStreaming) {
-      await _controller!.stopImageStream();
+  Future<void> _sendImageToServer(Uint8List bytes) async {
+    final uri = Uri.parse('http://127.0.0.1:8000/predict');
+    final request = http.MultipartRequest('POST', uri)
+      ..files.add(
+          http.MultipartFile.fromBytes('file', bytes, filename: 'frame.jpg'));
 
+    _waitingForResponse = true;
+
+    // Set a timer to resend the image if no response is received within 7 seconds
+    _responseTimer = Timer(const Duration(seconds: 7), () {
+      if (_waitingForResponse) {
+        print('No response received within 7 seconds, resending image...');
+        _sendImageToServer(bytes);
+      }
+    });
+
+    final response = await request.send();
+
+    if (response.statusCode == 200) {
+      final responseData = await response.stream.bytesToString();
+      final decodedData = jsonDecode(responseData);
       setState(() {
-        _isStreaming = false;
+        _recognitions = decodedData['objects'];
+        print('Recognitions: $responseData');
+        _speakRecognitions();
       });
+      _waitingForResponse = false;
+      _responseTimer?.cancel();
+    } else {
+      print('Failed to send image to server: ${response.statusCode}');
+      _waitingForResponse = false;
+      _responseTimer?.cancel();
+      // Retry sending the image
+      _captureAndSendImage();
+    }
+  }
+
+  Future<void> _speakRecognitions() async {
+    if (_recognitions != null && _recognitions!.isNotEmpty) {
+      final text = 'Recognized objects: ${_recognitions!.join(', ')}';
+      await _flutterTts.speak(text);
     }
   }
 
@@ -122,33 +165,24 @@ class _RoamModeScreenState extends State<RoamModeScreen> {
     return Scaffold(
       body: Column(
         children: [
-          Image.asset('assets/images/logo.jpg'), // Add the logo at the top
           Expanded(
             child: _controller != null && _controller!.value.isInitialized
-                ? CameraPreview(_controller!)
+                ? Center(
+                    child: AspectRatio(
+                      aspectRatio: _controller!.value.aspectRatio,
+                      child: CameraPreview(_controller!),
+                    ),
+                  )
                 : const Center(child: CircularProgressIndicator()),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ElevatedButton(
-                onPressed: _startStreaming,
-                style: ElevatedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  backgroundColor: const Color(0xFF004D40), // Text color
-                ),
-                child: const Text('Start Streaming'),
+          if (_recognitions != null)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(
+                'Recognitions: ${_recognitions!.join(', ')}',
+                style: const TextStyle(fontSize: 16, color: Colors.black),
               ),
-              ElevatedButton(
-                onPressed: _stopStreaming,
-                style: ElevatedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  backgroundColor: const Color(0xFF004D40), // Text color
-                ),
-                child: const Text('Stop Streaming'),
-              ),
-            ],
-          ),
+            ),
         ],
       ),
     );
@@ -157,9 +191,10 @@ class _RoamModeScreenState extends State<RoamModeScreen> {
   @override
   void dispose() {
     _controller?.dispose();
-    _channel.sink.close();
     _speechToText.stop();
     _listeningTimer?.cancel();
+    _responseTimer?.cancel();
+    _restartListeningTimer?.cancel();
     super.dispose();
   }
 }

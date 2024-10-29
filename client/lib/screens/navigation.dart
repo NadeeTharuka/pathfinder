@@ -195,11 +195,11 @@ class _NavigationScreenState extends State<NavigationScreen> {
       ),
       body: Column(
         children: [
-          SizedBox(
-            width: 200,
-            height: 200,
-            child: Image.asset('assets/images/logo.png'),
-          ),
+          // SizedBox(
+          //   width: 200,
+          //   height: 200,
+          //   child: Image.asset('assets/images/logo.png'),
+          // ),
           Expanded(
             child: Container(
               color: Colors.grey[100],
